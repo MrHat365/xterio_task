@@ -104,6 +104,16 @@
 - 6、`file_func.py`新增文本操作方法
 - 7、`file_func.py`新增周任务入口
 
+### 执行方法：
+```python
+python daily_task.py excel的sheet名称
+python register_account.py excel的sheet名称
+python rollup_bridge.py excel的sheet名称
+python week_task.py excel的sheet名称
+```
+![](https://github.com/MrHat365/xterio_task/blob/main/source/sheet.png?raw=true)
+
+参考上图所示，如果有多个账户按需分类，更方便做管理。
 
 ### Note：注意区分邀请任务和每日任务的区别，邀请首次完成所有任务，也就是新号跑完之后就不需要执行日常任务了。当所有新号邀请注册之后，第二天的时候需要配置定时任务来完成每日交互任务。详细教程可参考 [文本教程](https://github.com/MrHat365/xterio_task/blob/main/%E4%BA%A4%E4%BA%92%E6%95%99%E7%A8%8B.md)
 
