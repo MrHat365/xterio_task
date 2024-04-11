@@ -359,7 +359,7 @@ class Xterio:
                 "index": 0,
                 "num": vote_num
             }
-            response = self.session.post(url, data)
+            response = await self.session.post(url, data)
             response.raise_for_status()
             if response.status_code == 200:
                 response = response.json()
