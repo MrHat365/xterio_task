@@ -6,13 +6,13 @@
 """
 import asyncio
 import sys
-
 from utils.logger import logger
 from xterio import Xterio
 from utils.file_func import file_accounts
 
 
-ANSWER = ""
+ANSWER = "Sadness helps us grow and understand our feelings better. It makes us more caring and helps us connect with others. Feeling sad can actually make happy times seem even better, just like how the sun feels warmer after it's been cold and dark."
+
 
 async def daily_task(account):
     address = account["address"]
@@ -28,7 +28,7 @@ async def daily_task(account):
         answer = {
             "address": ANSWER,
         }
-        await xterio.chat(answer=answer)
+        await xterio.weekly(answer=answer)
 
 
 async def get_account_list(input):

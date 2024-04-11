@@ -263,7 +263,7 @@ class Xterio:
         except Exception as e:
             logger.error(f'[{self.address}] claimChatNft 异常：{e}')
 
-    async def chat(self):
+    async def chat(self, answer=None):
         url = f"https://3656kxpioifv7aumlcwe6zcqaa0eeiab.lambda-url.eu-central-1.on.aws/?address={self.address}"
         json_params = {
             'answer': "Sadness helps us grow and understand our feelings better. It makes us more caring and helps us connect with others. Feeling sad can actually make happy times seem even better, just like how the sun feels warmer after it's been cold and dark."
@@ -453,9 +453,9 @@ class Xterio:
                             response.raise_for_status()
                             res = response.json()
                             if res["err_code"] == 0:
-                                logger.success(f"[{self.address}] {task} Claim success")
+                                logger.success(f"[{self.address}] {task_id} Claim success")
                             else:
-                                logger.error(f"[{self.address}] {task} Claim fail")
+                                logger.error(f"[{self.address}] {task_id} Claim fail")
                             self.sleep()
                         except Exception as e:
                             logger.error(f'[{self.address}] Post task 异常：{e}')
@@ -479,6 +479,16 @@ class Xterio:
             await self.init_account()
             await self.trigger()
             await self.prop()
+            await self.task_report()
+            await self.post_task()
+
+        except Exception as e:
+            print(f'[{self.address}] 获取信息异常：{e}')
+
+    async def weekly(self, answer):
+        try:
+            await self.init_account()
+            await self.chat(answer=answer)
             await self.task_report()
             await self.post_task()
 
