@@ -41,4 +41,4 @@ async def get_account_list(input):
 
 if __name__ == '__main__':
     input = sys.argv[1]
-    asyncio.run(register_account(input))
+    asyncio.run(get_account_list(input))
