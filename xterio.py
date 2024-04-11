@@ -4,45 +4,36 @@
   @ Description: 
   @ History:
 """
-import random
 import time
-
-import requests
-from eth_account import Account
-from utils.logger import logger
-from fake_useragent import UserAgent
-from utils.web3_utils import Web3Utils
-from data.abi import *
-from data.config import BSC_RPC, XTERIO_RPC, sleep_config
+import random
 from curl_cffi.requests import AsyncSession
+from eth_typing import ChecksumAddress
+from web3 import Web3
+from eth_account import Account
+from web3.types import Wei
+
+from utils.logger import logger
+from utils.file_func import read_abi
+from utils.web3_utils import Web3Utils
+from utils.http_client import async_http_client
+from data.config import BSC_RPC, XTERIO_RPC, sleep_config, BSC_EXPLORER_TX, XTERIO_EXPLORER_TX
+
+
+XTERIO_DEPOSIT_ADDRESS = "0xc3671e7e875395314bbad175b2b7f0ef75da5339"
+PALIO_INCUBATOR_ADDRESS = "0xBeEDBF1d1908174b4Fc4157aCb128dA4FFa80942"
+PALIO_VOTER_ADDRESS = "0x73e987FB9F0b1c10db7D57b913dAa7F2Dc12b4f5"
 
 
 class Xterio:
-    def __init__(self, key: str, proxy=None, invite_code=None):
-        self._private_key = key
-        self.address = Account.from_key(key).address
-        self._invite_code = invite_code
+    def __init__(self, private_key: str, proxy=None, invite_code=None):
+        self._private_key = private_key
+        self.invite_code = invite_code
+        self.abi_config = read_abi()
 
-        headers = {
-            "User-Agent": UserAgent().random,
-            "Origin": "https://xter.io",
-            "Referer": "https://xter.io/",
-            "Sensorsdatajssdkcross": "%7B%22distinct_id%22%3A%2218e9e863069113e-06deb59f7fe507c-3b435c3b-2073600-18e9e86306a18ba%22%2C%22first_id%22%3A%22%22%2C%22props%22%3A%7B%22%24latest_traffic_source_type%22%3A%22%E7%9B%B4%E6%8E%A5%E6%B5%81%E9%87%8F%22%2C%22%24latest_search_keyword%22%3A%22%E6%9C%AA%E5%8F%96%E5%88%B0%E5%80%BC_%E7%9B%B4%E6%8E%A5%E6%89%93%E5%BC%80%22%2C%22%24latest_referrer%22%3A%22%22%7D%2C%22identities%22%3A%22eyIkaWRlbnRpdHlfY29va2llX2lkIjoiMThlOWU4NjMwNjkxMTNlLTA2ZGViNTlmN2ZlNTA3Yy0zYjQzNWMzYi0yMDczNjAwLTE4ZTllODYzMDZhMThiYSJ9%22%2C%22history_login_id%22%3A%7B%22name%22%3A%22%22%2C%22value%22%3A%22%22%7D%2C%22%24device_id%22%3A%2218e9e863069113e-06deb59f7fe507c-3b435c3b-2073600-18e9e86306a18ba%22%7D",
-           }
-
-        self.session = requests.Session()
-        self.session.headers = headers
-
-        if proxy is None:
-            self.bsc = Web3Utils(key=key, http_provider=BSC_RPC)
-            self.xterio = Web3Utils(key=key, http_provider=XTERIO_RPC)
-        else:
-            request_kwargs = {"proxies": {'https': f"http://{proxy}", 'http': f"http://{proxy}"}}
-            proxies = {'http': f'http://{proxy}',
-                       'https': f'http://{proxy}'}
-            self.bsc = Web3Utils(key=key, http_provider=BSC_RPC, request_kwargs=request_kwargs)
-            self.xterio = Web3Utils(key=key, http_provider=XTERIO_RPC, request_kwargs=request_kwargs)
-            self.session.proxies = proxies
+        self.xter_w3: Web3Utils = Web3Utils(private_key=private_key, http_provider=XTERIO_RPC, proxy=proxy)
+        self.bsc_w3: Web3Utils = Web3Utils(private_key=private_key, http_provider=BSC_RPC, proxy=proxy)
+        self.address: ChecksumAddress | None = Account.from_key(private_key).address
+        self.session: AsyncSession | None = async_http_client(proxy)
 
     @staticmethod
     def sleep():
@@ -57,9 +48,7 @@ class Xterio:
         """
         res = await self.login_with_wallet()
         is_new = res["is_new"]
-        access_token = res["access_token"]
         id_token = res["id_token"]
-        refresh_token = res["refresh_token"]
 
         if is_new == 1:
             logger.info(f"[{self.address}] This is a new account: {self.address}")
@@ -71,7 +60,7 @@ class Xterio:
         """
         uri = f"https://api.xter.io/account/v1/login/wallet/{self.address}"
         try:
-            res = self.session.get(uri)
+            res = await self.session.get(uri)
             res.raise_for_status()
             if "err_code" in res.text and res.json()["err_code"] == 0:
                 return res.json()["data"]["message"]
@@ -89,7 +78,7 @@ class Xterio:
 
         # 获取签名信息
         sign_params = await self.get_sign_params()
-        sign = self.xterio.get_signed_code(sign_params)
+        sign = self.xter_w3.get_signed_code(sign_params)
 
         json_params = {
             "address": self.address,
@@ -99,7 +88,7 @@ class Xterio:
             "invite_code": ""
         }
         try:
-            res = self.session.post(uri, json=json_params)
+            res = await self.session.post(uri, json=json_params)
             res.raise_for_status()
             if "err_code" in res.text and res.json()["err_code"] == 0:
                 return res.json()["data"]
@@ -108,49 +97,49 @@ class Xterio:
             logger.error(f"[{self.address}] Login With Wallet Exception: {e}")
 
     async def submit_code(self):
-        """ 提交邀请码
-        :return:
-        """
         try:
             url = f'https://api.xter.io/palio/v1/user/{self.address}/invite/apply'
             json_data = {
-                'code': self._invite_code
+                'code': self.invite_code
             }
-            res = self.session.post(url, json=json_data)
+            res = await self.session.post(url, json=json_data)
             res.raise_for_status()
             if 'err_code' in res.text and res.json()['err_code'] == 0:
-                logger.success(f'邀请码填写正确---{self.address}----{self._invite_code}')
+                logger.success(f'邀请码填写正确---{self.address}----{self.invite_code}')
         except Exception as e:
             logger.error(f'[{self.address}] 提交邀请码异常：{e}')
 
     async def rollup_bridge(self, amount):
-        """ 跨链桥
-        :param amount:
-        :return:
-        """
-        d = "0xb1a1a8820000000000000000000000000000000000000000000000000000000000030d4000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000000"
-        tx = {
-            "from": self.address,
-            "to": self.bsc.w3.to_checksum_address("0xc3671e7e875395314bbad175b2b7f0ef75da5339"),
-            "value": self.bsc.w3.to_wei(amount, "ether"),
-            "nonce": self.bsc.w3.eth.get_transaction_count(self.address),
-            "gasPrice": self.bsc.w3.eth.gas_price,
-            "data": d,
-            "gas": 743074,
-            "chainId": 56,
-        }
-
         try:
-            signed_txn = self.bsc.w3.eth.account.sign_transaction(tx, self._private_key)
-            transaction_hash = self.bsc.w3.eth.send_raw_transaction(signed_txn.rawTransaction).hex()
-            receipt = self.bsc.w3.eth.wait_for_transaction_receipt(transaction_hash)
-            logger.info(f"[{self.address}] Rollup Bridge Waiting for Bridge TX to complete...")
+            contract_address = Web3.to_checksum_address(XTERIO_DEPOSIT_ADDRESS)
+            contract = self.bsc_w3.w3.eth.contract(address=contract_address, abi=self.abi_config['deposit']['abi'])
+            gas = contract.functions.depositETH(200000, '0x').estimate_gas(
+                {
+                    'from': self.address,
+                    'value': self.bsc_w3.w3.to_wei(amount, "ether"),
+                    'nonce': self.bsc_w3.w3.eth.get_transaction_count(account=self.address)
+                }
+            )
+            transaction = contract.functions.depositETH(200000, '0x').build_transaction({
+                'from': self.address,
+                'gasPrice': self.bsc_w3.w3.eth.gas_price,
+                'nonce': self.bsc_w3.w3.eth.get_transaction_count(account=self.address),
+                'gas': int(gas * random.uniform(1.25, 1.3)),
+                'value': self.bsc_w3.w3.to_wei(amount, "ether")
+            })
+            signed_transaction = self.bsc_w3.w3.eth.account.sign_transaction(
+                transaction,
+                private_key=self._private_key
+            )
+            tx_hash = self.bsc_w3.w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+            receipt = self.bsc_w3.w3.eth.wait_for_transaction_receipt(tx_hash)
+
             if receipt.status != 1:
-                logger.error(f"[{self.address}] Rollup Bridge Transaction {transaction_hash} failed!")
+                logger.error(f"[{self.address}] Rollup Bridge Transaction {BSC_EXPLORER_TX}{tx_hash.hex()} failed!")
                 self.sleep()
                 return False
 
-            logger.success(f"[{self.address}] Rollup Bridge success the hash is: {transaction_hash}")
+            logger.success(f"[{self.address}] Rollup Bridge success the hash is: {BSC_EXPLORER_TX}{tx_hash.hex()}")
             self.sleep()
             return True
         except Exception as e:
@@ -158,26 +147,35 @@ class Xterio:
             return False
 
     async def claim_egg(self):
-        tx = {
-            "from": self.address,
-            "to": self.xterio.w3.to_checksum_address("0xBeEDBF1d1908174b4Fc4157aCb128dA4FFa80942"),
-            "value": 0,
-            "nonce": self.xterio.w3.eth.get_transaction_count(self.address),
-            "gasPrice": self.xterio.w3.eth.gas_price,
-            "chainId": 112358,
-            "data": "0x48f206fc"
-        }
         try:
-            tx["gas"] = int(self.xterio.w3.eth.estimate_gas(tx))
-            signed_txn = self.xterio.w3.eth.account.sign_transaction(tx, self._private_key)
-            transaction_hash = self.xterio.w3.eth.send_raw_transaction(signed_txn.rawTransaction).hex()
+            abi = self.abi_config['palio_incubator']['abi']
+            contract_address = Web3.to_checksum_address(PALIO_INCUBATOR_ADDRESS)
 
-            logger.info(f"[{self.address}] Claim EGG Waiting for ClaimEgg TX to complete...")
-            receipt = self.xterio.w3.eth.wait_for_transaction_receipt(transaction_hash)
+            contract = self.xter_w3.w3.eth.contract(address=contract_address, abi=abi)
+
+            gas = contract.functions.claimEgg().estimate_gas(
+                {
+                    'from': self.address,
+                    'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address)
+                }
+            )
+            transaction = contract.functions.claimEgg().build_transaction({
+                'gasPrice': self.xter_w3.w3.eth.gas_price,
+                'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address),
+                'gas': gas
+            })
+            signed_transaction = self.xter_w3.w3.eth.account.sign_transaction(
+                transaction,
+                private_key=self._private_key
+            )
+            tx_hash = self.xter_w3.w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+
+            receipt = self.xter_w3.w3.eth.wait_for_transaction_receipt(tx_hash)
+
             if receipt.status != 1:
-                logger.error(f"[{self.address}] Claim EGG Transaction {transaction_hash} failed!")
+                logger.error(f"[{self.address}] Claim EGG Transaction {XTERIO_EXPLORER_TX}{tx_hash.hex()} failed!")
                 self.sleep()
-            logger.success(f"[{self.address}] Claim EGG error hash: {transaction_hash}")
+            logger.success(f"[{self.address}] Claim EGG error hash: {XTERIO_EXPLORER_TX}{tx_hash.hex()}")
             self.sleep()
         except Exception as e:
             logger.error(f"[{self.address}] Claim EGG Exception: {e}")
@@ -188,30 +186,40 @@ class Xterio:
             "2": "Claim Rubber Duck",
             "3": "Claim Music ID"
         }
-        data = f"0x8e6e1450000000000000000000000000000000000000000000000000000000000000000{index}"
-        tx = {
-            "from": self.address,
-            "to": self.xterio.w3.to_checksum_address("0xBeEDBF1d1908174b4Fc4157aCb128dA4FFa80942"),
-            "value": 0,
-            "nonce": self.xterio.w3.eth.get_transaction_count(self.address),
-            "gasPrice": self.xterio.w3.eth.gas_price,
-            "chainId": 112358,
-            "data": data
-        }
-        try:
-            tx["gas"] = int(self.xterio.w3.eth.estimate_gas(tx))
-            signed_txn = self.xterio.w3.eth.account.sign_transaction(tx, self._private_key)
-            transaction_hash = self.xterio.w3.eth.send_raw_transaction(signed_txn.rawTransaction).hex()
 
-            logger.info(f" [{self.address}] {name[str(index)]} Waiting for ClaimUtility TX to complete...")
-            receipt = self.xterio.w3.eth.wait_for_transaction_receipt(transaction_hash)
+        try:
+            contract_address = Web3.to_checksum_address(PALIO_INCUBATOR_ADDRESS)
+            contract = self.xter_w3.w3.eth.contract(
+                address=contract_address,
+                abi=self.abi_config['palio_incubator']['abi']
+            )
+
+            gas = contract.functions.claimUtility(index).estimate_gas(
+                {
+                    'from': self.address,
+                    'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address)
+                }
+            )
+            transaction = contract.functions.claimUtility(index).build_transaction({
+                'gasPrice': self.xter_w3.w3.eth.gas_price,
+                'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address),
+                'gas': gas
+            })
+            signed_transaction = self.xter_w3.w3.eth.account.sign_transaction(
+                transaction,
+                private_key=self._private_key
+            )
+            tx_hash = self.xter_w3.w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+
+            receipt = self.xter_w3.w3.eth.wait_for_transaction_receipt(tx_hash)
+
             if receipt.status != 1:
-                logger.error(f"[{self.address}] {name[str(index)]} Transaction {transaction_hash} failed!")
+                logger.error(f"[{self.address}] {name[str(index)]} Transaction {XTERIO_EXPLORER_TX}{tx_hash.hex()} failed!")
                 self.sleep()
-            logger.success(f"[{self.address}] {name[str(index)]} ClaimUtility hash: {transaction_hash}")
+            logger.success(f"[{self.address}] {name[str(index)]} ClaimUtility hash: {XTERIO_EXPLORER_TX}{tx_hash.hex()}")
             self.sleep()
 
-            return transaction_hash
+            return tx_hash.hex()
         except Exception as e:
             if index == 1:
                 logger.error(f"[{self.address}] {name[str(index)]} Exception {e}")
@@ -223,38 +231,45 @@ class Xterio:
                 logger.error(f"[{self.address}] Claim Anima Exception {e}")
 
     async def claim_chat_nft(self):
-        account = Account.from_key(self._private_key)
-        tx = {
-            "from": account.address,
-            "to": self.xterio.w3.to_checksum_address("0xBeEDBF1d1908174b4Fc4157aCb128dA4FFa80942"),
-            "value": 0,
-            "nonce": self.xterio.w3.eth.get_transaction_count(account.address),
-            "gasPrice": self.xterio.w3.eth.gas_price,
-            "chainId": 112358,
-            "data": "0x8cb68a65",
-        }
         try:
-            tx["gas"] = int(self.xterio.w3.eth.estimate_gas(tx))
-            signed_txn = self.xterio.w3.eth.account.sign_transaction(tx, self._private_key)
-            transaction_hash = self.xterio.w3.eth.send_raw_transaction(signed_txn.rawTransaction).hex()
-            logger.info(f"[{self.address}] Waiting for claimChatNft TX to complete...")
-            receipt = self.xterio.w3.eth.wait_for_transaction_receipt(transaction_hash)
+            contract_address = Web3.to_checksum_address(PALIO_INCUBATOR_ADDRESS)
+
+            contract = self.xter_w3.w3.eth.contract(
+                address=contract_address,
+                abi=self.abi_config['palio_incubator']['abi']
+            )
+
+            transaction = contract.functions.claimChatNFT()
+            built_transaction = transaction.build_transaction({
+                "from": self.address,
+                'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address),
+                "gas": int(transaction.estimate_gas({"from": self.address}) * 1.2),
+            })
+
+            signed_transaction = self.xter_w3.w3.eth.account.sign_transaction(
+                built_transaction,
+                private_key=self._private_key
+            )
+
+            tx_hash = self.xter_w3.w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+            receipt = self.xter_w3.w3.eth.wait_for_transaction_receipt(tx_hash)
+
             if receipt.status != 1:
-                logger.error(f"[{self.address}] Transaction {transaction_hash} failed!")
+                logger.error(f"[{self.address}] Transaction {XTERIO_EXPLORER_TX}{tx_hash.hex()} failed!")
                 self.sleep()
-            logger.success(f"[{self.address}] claimChatNft hash: {transaction_hash}")
+            logger.success(f"[{self.address}] claimChatNft hash: {XTERIO_EXPLORER_TX}{tx_hash.hex()}")
             self.sleep()
-            return transaction_hash
+            return tx_hash.hex()
         except Exception as e:
             logger.error(f'[{self.address}] claimChatNft 异常：{e}')
 
-    async def chat(self):
+    async def chat(self, answer=None):
         url = f"https://3656kxpioifv7aumlcwe6zcqaa0eeiab.lambda-url.eu-central-1.on.aws/?address={self.address}"
         data_json = {
-            'answer': "In a small town draped in twilight, Ivy, a painter, and Rowan, a musician, found solace under the old oak tree. With every brushstroke, Ivy captured the melodies Rowan played, their art intertwining like vines. As seasons changed, so did their affection, growing deeper with each note and hue. Beneat"
+            'answer': "Sadness helps us grow and understand our feelings better. It makes us more caring and helps us connect with others. Feeling sad can actually make happy times seem even better, just like how the sun feels warmer after it's been cold and dark."
         }
         try:
-            chat_res = self.session.post(url, json=data_json)
+            chat_res = await self.session.post(url, json=data_json)
             chat_res.raise_for_status()
 
             tx_hash = await self.claim_chat_nft()
@@ -265,7 +280,7 @@ class Xterio:
                     'network': 'XTERIO',
                     'txHash': tx_hash
                 }
-                res = self.session.post(url, json=json_data)
+                res = await self.session.post(url, json=json_data)
                 res.raise_for_status()
                 if 'err_code' in res.text and res.json()['err_code'] == 0:
                     logger.success(f'[{self.address}] chatNFT领取完成')
@@ -291,7 +306,7 @@ class Xterio:
 
                     url = 'https://api.xter.io/baas/v1/event/trigger'
                     try:
-                        res = self.session.post(url, json=json_data)
+                        res = await self.session.post(url, json=json_data)
                         res.raise_for_status()
                         if 'err_code' in res.text and res.json()['err_code'] == 0:
                             logger.info(f'[{self.address}] 第{i}个小任务完成')
@@ -311,7 +326,7 @@ class Xterio:
                 data_json = {
                     'prop_id': i
                 }
-                res = self.session.post(url, json=data_json)
+                res = await self.session.post(url, json=data_json)
                 res.raise_for_status()
                 if 'err_code' in res.text and res.json()['err_code'] == 0:
                     count += 1
@@ -322,55 +337,67 @@ class Xterio:
 
     async def vote(self):
         # 获取总票数
-        url_get_tickets = f"https://api.xter.io/palio/v1/user/{self.address}/ticket"
-        res_get_tickets = self.session.get(url_get_tickets)
-        res_get_tickets.raise_for_status()
-        res = res_get_tickets.json()
-        total = res["data"]["total_ticket"]
-        # 获取已投票数量
-        contract = self.xterio.w3.eth.contract(
-            address=self.xterio.w3.to_checksum_address("0x73e987FB9F0b1c10db7D57b913dAa7F2Dc12b4f5"),
-            abi=vote_abi,
-        )
-        voted = contract.functions.userVotedAmt(self.address).call()
+        try:
+            url_get_tickets = f"https://api.xter.io/palio/v1/user/{self.address}/ticket"
+            res_get_tickets = await self.session.get(url_get_tickets)
+            res_get_tickets.raise_for_status()
+            res = res_get_tickets.json()
+            total = res["data"]["total_ticket"]
+            # 获取已投票数量
 
-        # 获取投票合约入参
-        vote_num = total - voted
-        url = f"https://api.xter.io/palio/v1/user/{self.address}/vote"
-        data = {
-            "index": 0,
-            "num": vote_num
-        }
-        response = self.session.post(url, data)
-        response.raise_for_status()
-        if response.status_code == 200:
-            response = response.json()
-            sign = response["data"]["sign"]
-            index = response["data"]["index"]
-            num = response["data"]["num"]
-            total_num = response["data"]["total_num"]
-            expire_time = response["data"]["expire_time"]
-            contract_addr = response["data"]["voter_address"]
-
-            tx = contract.functions.vote(index, num, total_num, expire_time, sign).build_transaction(
-                {
-                    "from": self.address,
-                    "value": 0,
-                    "nonce": self.xterio.w3.eth.get_transaction_count(self.address),
-                    "gasPrice": self.xterio.w3.eth.gas_price,
-                    "chainId": 112358,
-                }
+            contract = self.xter_w3.w3.eth.contract(
+                address=Web3.to_checksum_address(PALIO_VOTER_ADDRESS),
+                abi=self.abi_config['palio_voter']['abi']
             )
-            tx["gas"] = int(self.xterio.w3.eth.estimate_gas(tx))
-            signed_txn = self.xterio.w3.eth.account.sign_transaction(tx, self._private_key)
-            transaction_hash = self.xterio.w3.eth.send_raw_transaction(signed_txn.rawTransaction).hex()
-            logger.info(f"[{self.address}] Waiting for Vote TX to complete...")
-            receipt = self.xterio.w3.eth.wait_for_transaction_receipt(transaction_hash)
-            if receipt.status != 1:
-                logger.error(f"[{self.address}] Transaction {transaction_hash} failed!")
-                time.sleep(random.randint(2, 4))
-            logger.success(f"[{self.address}] Vote hash: {transaction_hash}")
-            time.sleep(random.randint(2, 4))
+
+            voted = contract.functions.userVotedAmt(self.address).call()
+
+            # 获取投票合约入参
+            vote_num = total - voted
+            url = f"https://api.xter.io/palio/v1/user/{self.address}/vote"
+            data = {
+                "index": 0,
+                "num": vote_num
+            }
+            response = self.session.post(url, data)
+            response.raise_for_status()
+            if response.status_code == 200:
+                response = response.json()
+                sign = response["data"]["sign"]
+                index = response["data"]["index"]
+                num = response["data"]["num"]
+                total_num = response["data"]["total_num"]
+                expire_time = response["data"]["expire_time"]
+
+                gas = contract.functions.vote(index, num, total_num, expire_time, sign).estimate_gas(
+                    {
+                        'from': self.address,
+                        'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address)
+                    }
+                )
+
+                tx = contract.functions.vote(index, num, total_num, expire_time, sign).build_transaction(
+                    {
+                        'gasPrice': self.xter_w3.w3.eth.gas_price,
+                        'nonce': self.xter_w3.w3.eth.get_transaction_count(account=self.address),
+                        'gas': gas
+                    }
+                )
+                signed_txn = self.xter_w3.w3.eth.account.sign_transaction(tx, self._private_key)
+                tx_hash = self.xter_w3.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+                receipt = self.xter_w3.w3.eth.wait_for_transaction_receipt(tx_hash)
+                if receipt.status != 1:
+                    logger.error(f"[{self.address}] Transaction {XTERIO_EXPLORER_TX}{tx_hash.hex()} failed!")
+                    time.sleep(random.randint(2, 4))
+                logger.success(f"[{self.address}] Vote hash: {XTERIO_EXPLORER_TX}{tx_hash.hex()}")
+                self.sleep()
+        except Exception as e:
+            err_str = str(e)
+            if "Not enough votes" in err_str:
+                logger.error(f'[{self.address}] | Failed to vote onchain: not enough votes')
+
+            else:
+                logger.error(f'[{self.address}] | Failed to vote onchain: {e}')
 
     async def task_report(self):
         try:
@@ -381,7 +408,7 @@ class Xterio:
                 data = {
                     "task_id": task
                 }
-                response = self.session.post(url, data)
+                response = await self.session.post(url, data)
                 response.raise_for_status()
                 res = response.json()
                 if res["err_code"] == 0:
@@ -402,7 +429,7 @@ class Xterio:
                 "task_id": task
             }
             try:
-                response = self.session.post(url, data)
+                response = await self.session.post(url, data)
                 response.raise_for_status()
                 res = response.json()
                 if res["err_code"] == 0:
