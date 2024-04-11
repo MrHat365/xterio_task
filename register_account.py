@@ -1,18 +1,18 @@
 """
   @ Author:   Mr.Hat
-  @ Date:     2024/4/7 08:49
+  @ Date:     2024/4/7 09:28
   @ Description: 
   @ History:
 """
 import asyncio
+import os
 import sys
-
 from utils.logger import logger
 from xterio import Xterio
 from utils.file_func import file_accounts
 
 
-async def daily_task(account):
+async def register_account(account):
     address = account["address"]
     private = account["private"]
     proxy = account["proxy"]
@@ -20,10 +20,10 @@ async def daily_task(account):
 
     xterio = Xterio(private, proxy=proxy, invite_code=invite_code)
     wallet_balance = xterio.xter_w3.w3.eth.get_balance(xterio.address)/10**18
-    if wallet_balance <= 0:
+    if wallet_balance <= 0.0:
         logger.error(f"[{address}] balance is {wallet_balance}, to check balance again!")
     else:
-        await xterio.daily()
+        await xterio.init_task()
 
 
 async def get_account_list(input):
@@ -33,7 +33,7 @@ async def get_account_list(input):
         temp_accounts = [account_list[i:i + thread_num] for i in range(0, len(account_list), thread_num)]
         for accounts in temp_accounts:
             tasks = [
-                asyncio.create_task(daily_task(account)) for account in accounts
+                asyncio.create_task(register_account(account)) for account in accounts
             ]
 
             await asyncio.gather(*tasks)
@@ -41,4 +41,4 @@ async def get_account_list(input):
 
 if __name__ == '__main__':
     input = sys.argv[1]
-    asyncio.run(get_account_list(input))
+    asyncio.run(register_account(input))

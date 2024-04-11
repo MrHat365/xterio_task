@@ -4,32 +4,43 @@
   @ Description: 
   @ History:
 """
+import sys
 import asyncio
-import os
 from xterio import Xterio
-from data.config import rollup_amount
+from utils.logger import logger
+from utils.file_func import file_accounts
 
 
-async def rollup_bridge():
-    current_directory = os.path.dirname(os.path.abspath(__file__))
-    # 从多个文件中读取钱包数据
-    file_name = os.path.join(current_directory, "data", "account.txt")
-    with open(file_name, 'r') as file:
-        for item in file:
-            item = item.strip()
-            temp_data = item.split("::")
-            private_key = temp_data[0]
-            proxy = temp_data[1]
-            xterio = Xterio(private_key, proxy=proxy)
+async def rollup_bridge(account):
+    address = account["address"]
+    private = account["private"]
+    proxy = account["proxy"]
+    xterio = Xterio(private, proxy=proxy)
+    bsc_balance = xterio.bsc_w3.balance()/10**18
+    if bsc_balance > 0.003:
+        ra = bsc_balance - 0.003
 
-            bsc_balance = xterio.bsc.w3.eth.get_balance(xterio.address)/10**18
+        res = await xterio.rollup_bridge(ra)
+        if res:
+            bsc_balance = xterio.bsc_w3.balance() / 10 ** 18
+            xterio_balance = xterio.xter_w3.balance() / 10 ** 18
+            logger.success(f"[{address}]: {bsc_balance}===={xterio_balance}")
 
-            ra = rollup_amount
 
-            if bsc_balance > ra:
-                await xterio.rollup_bridge(ra)
+async def get_account_list(input):
+    res, account_list = file_accounts("data.xlsx", sheet_name=input)
+    if res:
+        thread_num = 5
+        temp_accounts = [account_list[i:i + thread_num] for i in range(0, len(account_list), thread_num)]
+        for accounts in temp_accounts:
+            tasks = [
+                asyncio.create_task(rollup_bridge(account)) for account in accounts
+            ]
+
+            await asyncio.gather(*tasks)
 
 
 if __name__ == '__main__':
-    asyncio.run(rollup_bridge())
+    input = sys.argv[1]
+    asyncio.run(rollup_bridge(input))
 
