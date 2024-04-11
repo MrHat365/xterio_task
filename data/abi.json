@@ -1,27 +1,7 @@
-"""
-  @ Author:   Mr.Hat
-  @ Date:     2024/3/21 02:25
-  @ Description: 
-  @ History:
-"""
-rollup_bridge_abi = [
-    {"inputs": [{"internalType": "address", "name": "_owner", "type": "address"}], "stateMutability": "nonpayable",
-     "type": "constructor"}, {"stateMutability": "payable", "type": "fallback"},
-    {"inputs": [], "name": "getImplementation", "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-     "stateMutability": "nonpayable", "type": "function"},
-    {"inputs": [], "name": "getOwner", "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-     "stateMutability": "nonpayable", "type": "function"},
-    {"inputs": [{"internalType": "bytes", "name": "_code", "type": "bytes"}], "name": "setCode", "outputs": [],
-     "stateMutability": "nonpayable", "type": "function"},
-    {"inputs": [{"internalType": "address", "name": "_owner", "type": "address"}], "name": "setOwner", "outputs": [],
-     "stateMutability": "nonpayable", "type": "function"}, {
-        "inputs": [{"internalType": "bytes32", "name": "_key", "type": "bytes32"},
-                   {"internalType": "bytes32", "name": "_value", "type": "bytes32"}], "name": "setStorage",
-        "outputs": [], "stateMutability": "nonpayable", "type": "function"},
-    {"stateMutability": "payable", "type": "receive"}]
-
-PalioIncubator_abi = [
-[
+{
+  "palio_incubator": {
+    "contract": "0xBeEDBF1d1908174b4Fc4157aCb128dA4FFa80942",
+    "abi": [
     {
         "inputs": [
             {
@@ -54,22 +34,22 @@ PalioIncubator_abi = [
         "type": "constructor"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "booster",
                 "type": "address"
             },
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "uint256",
                 "name": "chapterIndex",
                 "type": "uint256"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "uint256",
                 "name": "boostPrice",
                 "type": "uint256"
@@ -79,22 +59,22 @@ PalioIncubator_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "claimer",
                 "type": "address"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "address",
                 "name": "nftaddress",
                 "type": "address"
             },
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "uint256",
                 "name": "chapterIndex",
                 "type": "uint256"
@@ -104,16 +84,16 @@ PalioIncubator_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "claimer",
                 "type": "address"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "address",
                 "name": "nftaddress",
                 "type": "address"
@@ -123,16 +103,16 @@ PalioIncubator_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "claimer",
                 "type": "address"
             },
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "uint8",
                 "name": "utilityType",
                 "type": "uint8"
@@ -142,16 +122,16 @@ PalioIncubator_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "previousOwner",
                 "type": "address"
             },
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "newOwner",
                 "type": "address"
@@ -161,16 +141,16 @@ PalioIncubator_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "sender",
                 "type": "address"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "uint256",
                 "name": "count",
                 "type": "uint256"
@@ -655,9 +635,10 @@ PalioIncubator_abi = [
         "type": "function"
     }
 ]
-]
-
-vote_abi = [
+  },
+  "palio_voter": {
+    "contract": "0x73e987FB9F0b1c10db7D57b913dAa7F2Dc12b4f5",
+    "abi": [
     {
         "inputs": [
             {
@@ -675,10 +656,10 @@ vote_abi = [
         "type": "constructor"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "uint256",
                 "name": "characterIdx",
                 "type": "uint256"
@@ -688,16 +669,16 @@ vote_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "previousOwner",
                 "type": "address"
             },
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "newOwner",
                 "type": "address"
@@ -707,28 +688,28 @@ vote_abi = [
         "type": "event"
     },
     {
-        "anonymous": False,
+        "anonymous": false,
         "inputs": [
             {
-                "indexed": True,
+                "indexed": true,
                 "internalType": "address",
                 "name": "voter",
                 "type": "address"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "uint256",
                 "name": "characterIdx",
                 "type": "uint256"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "uint256",
                 "name": "amount",
                 "type": "uint256"
             },
             {
-                "indexed": False,
+                "indexed": false,
                 "internalType": "uint256",
                 "name": "totalAmount",
                 "type": "uint256"
@@ -1009,3 +990,28 @@ vote_abi = [
         "type": "function"
     }
 ]
+  },
+  "deposit": {
+    "contract": "0xc3671e7e875395314bbad175b2b7f0ef75da5339",
+    "abi": [
+      {
+        "type": "function",
+        "name": "depositETH",
+        "inputs": [
+          {
+            "name": "_minGasLimit",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "_extraData",
+            "type": "bytes",
+            "internalType": "bytes"
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "payable"
+      }
+    ]
+  }
+}
