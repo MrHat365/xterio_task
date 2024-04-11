@@ -99,10 +99,10 @@ class Xterio:
     async def submit_code(self):
         try:
             url = f'https://api.xter.io/palio/v1/user/{self.address}/invite/apply'
-            json_data = {
+            json_params = {
                 'code': self.invite_code
             }
-            res = await self.session.post(url, json=json_data)
+            res = await self.session.post(url, json=json_params)
             res.raise_for_status()
             if 'err_code' in res.text and res.json()['err_code'] == 0:
                 logger.success(f'邀请码填写正确---{self.address}----{self.invite_code}')
@@ -263,24 +263,24 @@ class Xterio:
         except Exception as e:
             logger.error(f'[{self.address}] claimChatNft 异常：{e}')
 
-    async def chat(self, answer=None):
+    async def chat(self):
         url = f"https://3656kxpioifv7aumlcwe6zcqaa0eeiab.lambda-url.eu-central-1.on.aws/?address={self.address}"
-        data_json = {
+        json_params = {
             'answer': "Sadness helps us grow and understand our feelings better. It makes us more caring and helps us connect with others. Feeling sad can actually make happy times seem even better, just like how the sun feels warmer after it's been cold and dark."
         }
         try:
-            chat_res = await self.session.post(url, json=data_json)
+            chat_res = await self.session.post(url, json=json_params)
             chat_res.raise_for_status()
 
             tx_hash = await self.claim_chat_nft()
             try:
                 url = 'https://api.xter.io/baas/v1/event/trigger'
-                json_data = {
+                json_params = {
                     'eventType': 'PalioIncubator::*',
                     'network': 'XTERIO',
                     'txHash': tx_hash
                 }
-                res = await self.session.post(url, json=json_data)
+                res = await self.session.post(url, json=json_params)
                 res.raise_for_status()
                 if 'err_code' in res.text and res.json()['err_code'] == 0:
                     logger.success(f'[{self.address}] chatNFT领取完成')
@@ -298,7 +298,7 @@ class Xterio:
             for i in tasks:
                 transaction_hash = await self.claim_anima(i)
                 if transaction_hash:
-                    json_data = {
+                    json_params = {
                         'eventType': 'PalioIncubator::*',
                         'network': 'XTERIO',
                         'txHash': transaction_hash
@@ -306,7 +306,7 @@ class Xterio:
 
                     url = 'https://api.xter.io/baas/v1/event/trigger'
                     try:
-                        res = await self.session.post(url, json=json_data)
+                        res = await self.session.post(url, json=json_params)
                         res.raise_for_status()
                         if 'err_code' in res.text and res.json()['err_code'] == 0:
                             logger.info(f'[{self.address}] 第{i}个小任务完成')
@@ -323,10 +323,10 @@ class Xterio:
             url = f'https://api.xter.io/palio/v1/user/{self.address}/prop'
             count = 0
             for i in range(1, 4):
-                data_json = {
+                json_params = {
                     'prop_id': i
                 }
-                res = await self.session.post(url, json=data_json)
+                res = await self.session.post(url, json=json_params)
                 res.raise_for_status()
                 if 'err_code' in res.text and res.json()['err_code'] == 0:
                     count += 1
@@ -355,11 +355,11 @@ class Xterio:
             # 获取投票合约入参
             vote_num = total - voted
             url = f"https://api.xter.io/palio/v1/user/{self.address}/vote"
-            data = {
+            json_params = {
                 "index": 0,
                 "num": vote_num
             }
-            response = await self.session.post(url, data)
+            response = await self.session.post(url, json=json_params)
             response.raise_for_status()
             if response.status_code == 200:
                 response = response.json()
@@ -405,10 +405,10 @@ class Xterio:
             random.shuffle(task_id)
             for task in task_id:
                 url = f"https://api.xter.io/palio/v1/user/{self.address}/task/report"
-                data = {
+                json_params = {
                     "task_id": task
                 }
-                response = await self.session.post(url, data)
+                response = await self.session.post(url, json=json_params)
                 response.raise_for_status()
                 res = response.json()
                 if res["err_code"] == 0:
@@ -420,25 +420,45 @@ class Xterio:
         except Exception as e:
             logger.error(f'[{self.address}] Go task 异常：{e}')
 
+    async def get_task_list(self) -> dict | bool:
+        try:
+            response = await self.session.get(f'https://api.xter.io/palio/v1/user/{self.address}/task')
+
+            res = response.json()
+
+            if res['err_code'] != 0:
+                raise Exception(res)
+
+            else:
+                return res['data']['list']
+
+        except Exception as err:
+            logger.error(f'[{self.address}] Failed to get task ID: {err}')
+
     async def post_task(self):
-        task_id = [11, 17, 15, 18, 12, 13, 14]
-        random.shuffle(task_id)
-        for task in task_id:
-            url = f"https://api.xter.io/palio/v1/user/{self.address}/task"
-            data = {
-                "task_id": task
-            }
-            try:
-                response = await self.session.post(url, data)
-                response.raise_for_status()
-                res = response.json()
-                if res["err_code"] == 0:
-                    logger.success(f"[{self.address}] {task} Claim success")
-                else:
-                    logger.error(f"[{self.address}] {task} Claim fail")
-                self.sleep()
-            except Exception as e:
-                logger.error(f'[{self.address}] Post task 异常：{e}')
+        task_list = await self.get_task_list()
+        if not task_list:
+            logger.info(f"[{self.address}] unable to get task list")
+        else:
+            for task in task_list:
+                task_id = task['ID']
+                for user_task in task['user_task']:
+                    if user_task['status'] == 1:
+                        url = f"https://api.xter.io/palio/v1/user/{self.address}/task"
+                        json_data = {
+                            "task_id": task_id
+                        }
+                        try:
+                            response = await self.session.post(url, json=json_data)
+                            response.raise_for_status()
+                            res = response.json()
+                            if res["err_code"] == 0:
+                                logger.success(f"[{self.address}] {task} Claim success")
+                            else:
+                                logger.error(f"[{self.address}] {task} Claim fail")
+                            self.sleep()
+                        except Exception as e:
+                            logger.error(f'[{self.address}] Post task 异常：{e}')
 
     async def init_task(self):
         try:
